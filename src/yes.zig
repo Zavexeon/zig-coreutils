@@ -5,16 +5,13 @@ const std = @import("std");
 pub fn main() !u8 {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
-    const allocator = std.heap.page_allocator;
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const allocator = arena.allocator();
 
     const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
-
     const message = if (args.len > 1) try std.mem.join(allocator, " ", args[1..]) else "y";
-    defer if (args.len > 1) allocator.free(message);
-
     const final_message = try allocator.alloc(u8, message.len + 1);
-    defer allocator.free(final_message);
 
     // appending a newline to the end of final_message
     std.mem.copyForwards(u8, final_message, message);
@@ -23,7 +20,7 @@ pub fn main() !u8 {
     // here I create a buffer and fill it with the newline appended message
     const page_size = std.heap.pageSize();
     const buf_size = try std.math.ceilPowerOfTwo(usize, @max(final_message.len, page_size * 2)); // ensure buffer is large enough for message
-    var buf = try allocator.alignedAlloc(u8, page_size, buf_size);
+    var buf = try std.heap.page_allocator.alignedAlloc(u8, page_size, buf_size);
 
     var pos: usize = 0;
     while (pos + final_message.len <= buf.len) : (pos += final_message.len) {
@@ -31,6 +28,8 @@ pub fn main() !u8 {
     } else {
         @memset(buf[pos..], 0); // fill rest of buffer with zeroes to avoid garbage output
     }
+
+    arena.deinit(); // go ahead and free all memory we don't need anymore
 
     while (true) {
         stdout.writeAll(buf) catch |err| {
@@ -42,6 +41,7 @@ pub fn main() !u8 {
 }
 
 // NOTE
+//
 // This whole program could be a simple loop that just outputs to stdout BUT
 // I was curious why GNU's yes program was so fast - ~8GiB/s on my machine! It
 // turns out they buffered their IO for page aligned writes, so I copied that
