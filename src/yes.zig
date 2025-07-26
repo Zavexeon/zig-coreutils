@@ -29,7 +29,8 @@ pub fn main() !u8 {
         @memset(buf[pos..], 0); // fill rest of buffer with zeroes to avoid garbage output
     }
 
-    arena.deinit(); // go ahead and free all memory we don't need anymore
+    // freeing the memory here is really funny since it's almost neglible compared to the giant buffer
+    arena.deinit();
 
     while (true) {
         stdout.writeAll(buf) catch |err| {
